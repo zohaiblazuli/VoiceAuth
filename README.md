@@ -1,3 +1,7 @@
+Created by two nerds ;)
+
+*This project is currently under development. It will be presented at Regeneron ISEF 2025, held at Columbus, Ohio.*
+
 # VoiceAuth - AI Voice Detection System
 
 A desktop application that uses machine learning to differentiate between AI-generated and human voices based on audio samples. VoiceAuth employs logistic regression and advanced audio feature extraction to provide accurate classification of voice samples.
@@ -13,8 +17,10 @@ A desktop application that uses machine learning to differentiate between AI-gen
 - 💾 **Cross-Platform Support**: Works on Windows, macOS, and Linux
 
 ## Screenshots
+![Screenshot 2025-03-22 203757](https://github.com/user-attachments/assets/8a7fb6f6-5507-4fb7-b624-4078a948bd37)
 
-*[Screenshots would be included here]*
+![Screenshot 2025-03-22 203823](https://github.com/user-attachments/assets/ea311f88-7bde-4f29-bb20-c882b7227f77)
+
 
 ## Installation
 
@@ -146,9 +152,9 @@ To add new features:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License
+## License & Copyright
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Do kindly mention/credit us when showcasing this project.
 
 ## Acknowledgements
 
