@@ -129,12 +129,12 @@ class SimpleStartupAnimation(QWidget):
         """Show loading messages in sequence"""
         self.message_index = 0
         self.messages = [
-            "Loading UI...",
-            "Initializing audio processor...",
-            "Redeeming the code...",
-            "Petting Umer's cat...",
-            "Preparing voice classifier...",
-            "Ready!"
+            "loading assets",
+            "initializing audio processor...",
+            "yelling DO NOT REDEEM IT...",
+            "petting umer's cat...",
+            "trying not to procrastinate",
+            "successfully deleted indians from earth & imported model!"
         ]
         self.update_message()
     

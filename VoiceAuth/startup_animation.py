@@ -39,12 +39,12 @@ class StartupAnimationWidget(QWidget):
         self._text_size = 120  # Bigger text size
         self._continuous_gradient_animation = False
         self._loading_messages = [
-            "Loading UI...",
-            "Initializing audio processor...",
-            "Redeeming the code...",
-            "Petting Umer's cat...",
-            "Preparing voice classifier...",
-            "Ready!"
+            "loading assets...",
+            "initializing audio processor...",
+            "deleting indians from earth...",
+            "petting umer's cat...",
+            "trying to win grand award at ISEF...",
+            "successfully deleted indians from earth & imported model!"
         ]
         
         # Hide the main layout widgets initially

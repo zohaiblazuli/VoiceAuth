@@ -835,7 +835,7 @@ class RecordSampleTab(QWidget):
         
         # Process button
         process_layout = QHBoxLayout()
-        self.process_button = QPushButton("Process & Classify Recording")
+        self.process_button = QPushButton("Process And Classify Recording")
         self.process_button.clicked.connect(self.process_recording)
         self.process_button.setEnabled(False)
         self.process_button.setMinimumHeight(36)
