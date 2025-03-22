@@ -203,9 +203,9 @@ class VoiceAuthApp(QMainWindow):
         changes_list.setContentsMargins(10, 0, 0, 0)
         
         bullet_points = [
-            "Fixed an issue when re-training the model, the UI would crash",
-            "Fixed aspect ratio bug",
-            "Added support for multiple audio formats"
+            "fixed media loading errors",
+            "fixed aspect ratio bug",
+            "fed umer's cat"
         ]
         
         for point in bullet_points:

@@ -68,7 +68,7 @@ class SimpleStartupAnimation(QWidget):
         content_container.addSpacing(20)
         
         # Create loading message label
-        self.message = QLabel("Loading UI...")
+        self.message = QLabel("loading UI...")
         self.message.setFont(QFont("Segoe UI", 36))
         self.message.setAlignment(Qt.AlignCenter)
         self.message.setStyleSheet("color: rgba(255, 255, 255, 0.7); background-color: transparent;")
@@ -129,11 +129,11 @@ class SimpleStartupAnimation(QWidget):
         """Show loading messages in sequence"""
         self.message_index = 0
         self.messages = [
-            "loading assets",
+            "loading assets..",
             "initializing audio processor...",
-            "yelling DO NOT REDEEM IT...",
-            "petting umer's cat...",
-            "trying not to procrastinate",
+            "yelling DO NOT REDEEM IT....",
+            "petting umer's cat..",
+            "trying not to procrastinate....",
             "successfully deleted indians from earth & imported model!"
         ]
         self.update_message()
