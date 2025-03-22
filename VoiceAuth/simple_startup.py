@@ -2,9 +2,14 @@
 Simple and reliable startup animation for VoiceAuth.
 """
 
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRect, QSize
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QGraphicsOpacityEffect, QSizePolicy
-from PyQt5.QtGui import QFont, QColor, QLinearGradient, QPalette, QPixmap
+import sys
+import os
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
+                         QLabel, QPushButton, QProgressBar, QSpacerItem, 
+                         QSizePolicy, QDesktopWidget, QGraphicsOpacityEffect)
+from PyQt5.QtCore import Qt, QTimer, QSize, QRect, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QPixmap, QFont, QFontDatabase, QLinearGradient, QColor, QBrush, QPainter
+from utils import get_media_path
 
 class SimpleStartupAnimation(QWidget):
     """A simple and reliable startup animation widget"""
@@ -35,33 +40,48 @@ class SimpleStartupAnimation(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         
-        # Add spacer to center content
+        # Add spacer to center content vertically
         layout.addStretch(1)
         
-        # Create title using image instead of text
-        self.title = QLabel()
-        pixmap = QPixmap("media/text-only-white.png")
-        # Scale the pixmap to a much smaller size
-        scaled_pixmap = pixmap.scaled(int(pixmap.width()*0.6), int(pixmap.height()*0.6), 
-                                    Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.title.setPixmap(scaled_pixmap)
-        self.title.setAlignment(Qt.AlignCenter)
-        self.title.setStyleSheet("background-color: transparent;")
-        self.title.setMinimumHeight(200)  # Reduced height
-        self.title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.title, 4)
+        # Create a container for centered content
+        center_container = QHBoxLayout()
+        center_container.addStretch(1)  # Add stretch before content for centering
         
-        # Add spacer between title and message
-        layout.addSpacing(20)
+        # Create content container
+        content_container = QVBoxLayout()
+        content_container.setAlignment(Qt.AlignCenter)
+        
+        # Create app name label
+        self.app_name = QLabel()
+        pixmap = QPixmap(get_media_path("text-only-white.png"))
+        scaled_pixmap = pixmap.scaled(int(pixmap.width()*0.4), int(pixmap.height()*0.4), 
+                                     Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.app_name.setPixmap(scaled_pixmap)
+        self.app_name.setAlignment(Qt.AlignCenter)
+        self.app_name.setStyleSheet("background-color: transparent;")
+        self.app_name.setMinimumHeight(200)  # Reduced height
+        
+        # Add app name to content container
+        content_container.addWidget(self.app_name)
+        
+        # Add spacing between title and message
+        content_container.addSpacing(20)
         
         # Create loading message label
         self.message = QLabel("Loading UI...")
         self.message.setFont(QFont("Segoe UI", 36))
         self.message.setAlignment(Qt.AlignCenter)
         self.message.setStyleSheet("color: rgba(255, 255, 255, 0.7); background-color: transparent;")
-        layout.addWidget(self.message, 1)
+        content_container.addWidget(self.message)
         
-        # Add bottom spacer
+        # Add content container to center container
+        center_container.addLayout(content_container)
+        center_container.addStretch(1)  # Add stretch after content for centering
+        
+        # Add center container to main layout
+        layout.addLayout(center_container)
+        
+        # Add bottom spacer for vertical centering
         layout.addStretch(1)
     
     def hide_main_widgets(self):
@@ -86,9 +106,9 @@ class SimpleStartupAnimation(QWidget):
         
         try:
             # Create opacity effect for title
-            effect = QGraphicsOpacityEffect(self.title)
+            effect = QGraphicsOpacityEffect(self.app_name)
             effect.setOpacity(0)
-            self.title.setGraphicsEffect(effect)
+            self.app_name.setGraphicsEffect(effect)
             
             # Create fade-in animation
             self.anim = QPropertyAnimation(effect, b"opacity")

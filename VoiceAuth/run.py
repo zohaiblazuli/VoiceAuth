@@ -5,12 +5,14 @@ Launcher script for the Voice Classifier application
 
 import os
 import sys
+from utils import get_output_path, get_model_path  # Import path utilities
 from app import main
 
 if __name__ == "__main__":
-    # Make sure output directories exist
-    os.makedirs("output", exist_ok=True)
-    os.makedirs("output/models", exist_ok=True)
+    # Use utilities to ensure output directories exist (these functions
+    # internally create the directories if they don't exist)
+    output_dir = get_output_path()
+    model_dir = get_model_path()
     
     # Launch the application
     main() 

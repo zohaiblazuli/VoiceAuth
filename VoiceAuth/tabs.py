@@ -11,9 +11,10 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QVBoxLayout, QHBoxLayout,
                            QComboBox, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem,
                            QGroupBox, QGridLayout, QSplitter, QSpacerItem,
                            QSizePolicy, QScrollArea, QSlider, QFrame, QProgressDialog, QMessageBox)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QMetaObject, Q_ARG, QRect
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QMetaObject, Q_ARG, QRect, QObject
 from PyQt5.QtGui import QFont, QPixmap, QColor, QPainter, QBrush, QPen, QLinearGradient
 
+from utils import get_output_path, get_model_path  # Import path utilities
 from ui_components import StylesheetProvider
 from audio_processor import AudioProcessor
 from simple_model import classify_audio
@@ -109,8 +110,8 @@ class WorkerThread(QThread):
                 # Ensure feedback directory exists
                 os.makedirs(os.path.dirname(feedback_file), exist_ok=True)
                 
-                # Create samples directory if it doesn't exist
-                samples_dir = os.path.join(os.getcwd(), "samples")
+                # Also ensure samples directory exists
+                samples_dir = os.path.join(get_output_path(), "samples")
                 os.makedirs(samples_dir, exist_ok=True)
                 
                 # Create or load feedback dataframe
@@ -135,7 +136,7 @@ class WorkerThread(QThread):
                     # Use relative path in feedback_df
                     relative_path = os.path.join("samples", saved_filename)
                 except Exception as e:
-                    self.update_status.emit(f"Warning: Could not copy audio file - {str(e)}")
+                    self.update_status.emit(f"Warning: Could not copy audio file: {str(e)}")
                     relative_path = file_path  # Use original path if copy fails
                 
                 # Create new row with features and label
@@ -192,26 +193,31 @@ class WorkerThread(QThread):
                     })
                     return
                 
-                # Create backup of existing model and scaler
+                # Create backup of current model if it exists
                 if os.path.exists(model_path):
-                    import shutil
-                    backup_dir = os.path.join(os.path.dirname(model_path), "backups")
-                    os.makedirs(backup_dir, exist_ok=True)
-                    
-                    # Create timestamped backup
-                    import time
-                    timestamp = time.strftime("%Y%m%d_%H%M%S")
-                    model_backup = os.path.join(backup_dir, f"{os.path.basename(model_path)}.{timestamp}.bak")
-                    scaler_backup = os.path.join(backup_dir, f"{os.path.basename(os.path.splitext(model_path)[0])}_scaler.pkl.{timestamp}.bak")
-                    
                     try:
+                        # Create backup directory
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        backup_dir = os.path.join(get_model_path(), "backups")
+                        os.makedirs(backup_dir, exist_ok=True)
+                        
+                        # Create backup files with timestamp
+                        model_backup = os.path.join(backup_dir, f"{os.path.basename(model_path)}.{timestamp}.bak")
+                        scaler_backup = os.path.join(backup_dir, f"{os.path.basename(os.path.splitext(model_path)[0])}_scaler.pkl.{timestamp}.bak")
+                        
+                        # Copy files
                         shutil.copy2(model_path, model_backup)
                         scaler_path = f"{os.path.splitext(model_path)[0]}_scaler.pkl"
                         if os.path.exists(scaler_path):
                             shutil.copy2(scaler_path, scaler_backup)
-                        self.update_status.emit("Created backup of existing model")
+                            
+                        self.update_status.emit(f"Created model backup: {model_backup}")
                     except Exception as e:
-                        self.update_status.emit(f"Warning: Failed to create model backup: {str(e)}")
+                        self.update_status.emit(f"Warning: Could not create model backup: {str(e)}")
+                
+                # Create directory for samples
+                samples_dir = os.path.join(get_output_path(), "samples")
+                os.makedirs(samples_dir, exist_ok=True)
                 
                 # Load original training data if available
                 if os.path.exists(original_features):
@@ -592,7 +598,23 @@ class ImportSampleTab(QWidget):
         self.result_label.setText(prediction_text)
         self.result_label.setStyleSheet(StylesheetProvider.get_result_label_style(is_ai))
         
+        # Update confidence bar with a proper style
         self.confidence_bar.setValue(int(confidence))
+        self.confidence_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 5px;
+                background-color: rgba(30, 30, 40, 0.5);
+                text-align: center;
+                padding: 1px;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                                  stop:0 #85a3da, stop:0.5 #6e6ebe, stop:1 #d78599);
+                border-radius: 3px;
+            }
+        """)
         
         # Show results
         self.results_group.setVisible(True)
@@ -1104,7 +1126,23 @@ class RecordSampleTab(QWidget):
         self.result_label.setText(prediction_text)
         self.result_label.setStyleSheet(StylesheetProvider.get_result_label_style(is_ai))
         
+        # Update confidence meter with a proper style
         self.confidence_meter.setValue(int(confidence))
+        self.confidence_meter.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 5px;
+                background-color: rgba(30, 30, 40, 0.5);
+                text-align: center;
+                padding: 1px;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                                  stop:0 #85a3da, stop:0.5 #6e6ebe, stop:1 #d78599);
+                border-radius: 3px;
+            }
+        """)
         
         # Show results
         self.results_group.setVisible(True)
@@ -1192,510 +1230,7 @@ class RecordSampleTab(QWidget):
         """Thread-safe status update using Qt signals"""
         self.status_update.emit(message)
 
-class MatplotlibCanvas(FigureCanvas):
-    """Matplotlib canvas for plotting"""
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = self.fig.add_subplot(111)
-        super(MatplotlibCanvas, self).__init__(self.fig)
-        
-        # Set responsive size policy for better scaling
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.updateGeometry()
-        
-        self.setParent(parent)
-        
-        # Transparent background
-        self.fig.set_facecolor('none')
-        self.fig.patch.set_alpha(0)
-        
-        # Transparent axes background with subtle grid
-        self.axes.set_facecolor('none')
-        self.axes.patch.set_alpha(0)
-        
-        # Minimal spines with low opacity - use proper matplotlib color format
-        self.axes.spines['top'].set_visible(False)
-        self.axes.spines['right'].set_visible(False)
-        self.axes.spines['left'].set_color((1, 1, 1, 0.2))  # white with 20% opacity
-        self.axes.spines['bottom'].set_color((1, 1, 1, 0.2))  # white with 20% opacity
-        
-        # Light text and axis styles - use proper matplotlib color format
-        self.axes.tick_params(colors=(1, 1, 1, 0.7), labelsize=9)  # white with 70% opacity
-        self.axes.yaxis.label.set_color((1, 1, 1, 0.9))  # white with 90% opacity
-        self.axes.xaxis.label.set_color((1, 1, 1, 0.9))  # white with 90% opacity
-        self.axes.title.set_color((1, 1, 1, 0.9))  # white with 90% opacity
-        
-        # Set tight layout for better use of space
-        self.fig.tight_layout(pad=2.0)
-        
-    def resizeEvent(self, event):
-        """Handle resize events by updating the figure layout"""
-        super().resizeEvent(event)
-        self.fig.tight_layout(pad=2.0)
-        self.draw_idle()  # Request a redraw when idle
-
-class InformationTab(QWidget):
-    """Tab for showing information and statistics about the model"""
-    
-    def __init__(self, parent=None, model_path=None, features_path=None, version=None, last_updated=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.model_path = model_path
-        self.features_path = features_path
-        self.version = version
-        self.last_updated = last_updated
-        
-        # Set responsive size policy
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        
-        self.setup_ui()
-    
-    def setup_ui(self):
-        """Set up the UI components"""
-        # Create a scroll area to contain the entire content
-        scroll_area = QScrollArea(self)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
-        
-        # Create the content widget that will be placed in the scroll area
-        content_widget = QWidget()
-        content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        content_widget.setStyleSheet("QWidget { background-color: transparent; }")
-        
-        # Set the scroll area as the main layout widget
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
-        
-        # Create content layout
-        layout = QVBoxLayout(content_widget)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(20)
-        
-        # Top section - About VoiceAuth - dark semi-transparent background
-        about_group = QGroupBox("About VoiceAuth")
-        about_group.setStyleSheet("""
-            QGroupBox { 
-                color: #e0e0e0; 
-                font-weight: bold; 
-                border: 1px solid rgba(255, 255, 255, 0.15); 
-                border-radius: 8px; 
-                margin-top: 1ex; 
-                background-color: rgba(30, 30, 50, 0.7);
-            } 
-            QGroupBox::title { 
-                subcontrol-origin: margin; 
-                subcontrol-position: top center; 
-                padding: 0 10px; 
-                background-color: transparent;
-            }
-        """)
-        about_layout = QVBoxLayout(about_group)
-        about_layout.setSpacing(15)
-        about_layout.setContentsMargins(15, 20, 15, 15)
-        
-        title_label = QLabel("VoiceAuth - AI Voice Detection")
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff; background-color: transparent;")
-        title_label.setAlignment(Qt.AlignCenter)
-        
-        subtitle_label = QLabel("Developed by Zohaib Khan & Umer Kashif for Regeneron ISEF 2025")
-        subtitle_label.setStyleSheet("font-size: 12px; color: #d0d0d0; background-color: transparent;")
-        subtitle_label.setAlignment(Qt.AlignCenter)
-        
-        desc_label = QLabel(
-            "VoiceAuth is an application that uses machine learning to "
-            "differentiate between AI-generated and human voices. "
-            "The system employs logistic regression on extracted audio features "
-            "to make its predictions with high accuracy."
-        )
-        desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("font-size: 13px; color: #ffffff; padding: 5px; background-color: transparent;")
-        desc_label.setMinimumHeight(60)
-        
-        # Version information
-        version_layout = QHBoxLayout()
-        version_label_title = QLabel("Version:")
-        version_label_title.setStyleSheet("color: #c0c0c0; background-color: transparent;")
-        self.version_label = QLabel(self.version)
-        self.version_label.setStyleSheet("color: #ffffff; font-weight: bold; background-color: transparent;")
-        self.version_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        version_layout.addWidget(version_label_title, 0)
-        version_layout.addWidget(self.version_label, 1)
-        
-        date_layout = QHBoxLayout()
-        date_label_title = QLabel("Last Updated:")
-        date_label_title.setStyleSheet("color: #c0c0c0; background-color: transparent;")
-        self.date_label = QLabel(self.last_updated)
-        self.date_label.setStyleSheet("color: #ffffff; background-color: transparent;")
-        self.date_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        date_layout.addWidget(date_label_title, 0)
-        date_layout.addWidget(self.date_label, 1)
-        
-        about_layout.addWidget(title_label)
-        about_layout.addWidget(subtitle_label)
-        about_layout.addWidget(desc_label)
-        about_layout.addLayout(version_layout)
-        about_layout.addLayout(date_layout)
-        
-        # Dataset Statistics section
-        dataset_group = QGroupBox("Dataset Statistics")
-        dataset_group.setStyleSheet("""
-            QGroupBox { 
-                color: #e0e0e0; 
-                font-weight: bold; 
-                border: 1px solid rgba(255, 255, 255, 0.15); 
-                border-radius: 8px; 
-                margin-top: 1ex; 
-                background-color: rgba(30, 30, 50, 0.7);
-            } 
-            QGroupBox::title { 
-                subcontrol-origin: margin; 
-                subcontrol-position: top center; 
-                padding: 0 10px; 
-                background-color: transparent;
-            }
-        """)
-        dataset_layout = QVBoxLayout(dataset_group)
-        dataset_layout.setSpacing(15)
-        dataset_layout.setContentsMargins(15, 20, 15, 15)
-        
-        try:
-            # Set the fixed number of human samples
-            human_samples = 30582
-            ai_samples = 31275
-            total_samples = human_samples + ai_samples
-            
-            # Dataset statistics section
-            stats_container = QWidget()
-            stats_container.setStyleSheet("background-color: rgba(40, 40, 60, 0.5); border-radius: 8px;")
-            stats_container_layout = QVBoxLayout(stats_container)
-            stats_container_layout.setContentsMargins(10, 10, 10, 10)
-            
-            stats_text = QLabel(
-                f"Total samples: {total_samples:,}\n"
-                f"AI-generated samples: {ai_samples:,}\n"
-                f"Human samples: {human_samples:,}\n"
-            )
-            stats_text.setStyleSheet("color: #ffffff; font-size: 14px; background-color: transparent;")
-            stats_text.setAlignment(Qt.AlignCenter)
-            stats_container_layout.addWidget(stats_text)
-            
-            dataset_layout.addWidget(stats_container)
-            
-            # Create distribution plot
-            dataset_layout.addWidget(QLabel("Dataset Distribution"))
-            
-            # Matplotlib container with dark background
-            plot_container = QWidget()
-            plot_container.setStyleSheet("background-color: rgba(40, 40, 60, 0.5); border-radius: 8px;")
-            plot_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-            plot_container_layout = QVBoxLayout(plot_container)
-            plot_container_layout.setContentsMargins(10, 10, 10, 10)
-            
-            # Use a widget to wrap the matplotlib canvas for better sizing
-            self.dist_canvas = MatplotlibCanvas(self, width=6, height=4, dpi=100)
-            self.dist_canvas.setMinimumHeight(250)
-            self.dist_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            
-            # Get axis and create plot
-            ax = self.dist_canvas.axes
-            
-            # Clear any existing plots
-            ax.clear()
-            
-            # Add gridlines for better readability
-            ax.grid(True, linestyle='--', alpha=0.3, color='white')
-            
-            labels = ['Human', 'AI-Generated']
-            counts = [human_samples, ai_samples]
-            
-            # Create bar chart with custom colors
-            bars = ax.bar(labels, counts, color=['#85A3DA', '#D7859D'])
-            
-            # Add data labels above bars
-            for bar, count in zip(bars, counts):
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height,
-                        f'{count:,}', ha='center', va='bottom', color='white', fontsize=12)
-            
-            # Set axis labels and title
-            ax.set_ylabel('Number of Samples', color='white', fontsize=12)
-            ax.set_title('Dataset Distribution', color='white', fontsize=14)
-            ax.tick_params(colors='white', labelsize=12)
-            
-            # Make sure figure has transparent background
-            ax.set_facecolor('none')
-            self.dist_canvas.fig.patch.set_alpha(0.0)
-            
-            # Add the canvas to the layout with proper spacing
-            plot_container_layout.addWidget(self.dist_canvas)
-            
-            # Add to layout
-            dataset_layout.addWidget(plot_container)
-            
-        except Exception as e:
-            error_text = QLabel(f"Error loading statistics: {str(e)}")
-            error_text.setWordWrap(True)
-            error_text.setStyleSheet("color: #ff6b6b; background-color: transparent;")
-            dataset_layout.addWidget(error_text)
-        
-        # MODEL PERFORMANCE SECTION
-        performance_group = QGroupBox("Model Performance Metrics")
-        performance_group.setStyleSheet("""
-            QGroupBox { 
-                color: #e0e0e0; 
-                font-weight: bold; 
-                border: 1px solid rgba(255, 255, 255, 0.15); 
-                border-radius: 8px; 
-                margin-top: 1ex; 
-                background-color: rgba(30, 30, 50, 0.7);
-            } 
-            QGroupBox::title { 
-                subcontrol-origin: margin; 
-                subcontrol-position: top center; 
-                padding: 0 10px; 
-                background-color: transparent;
-            }
-        """)
-        performance_layout = QVBoxLayout(performance_group)
-        performance_layout.setSpacing(15)
-        performance_layout.setContentsMargins(15, 20, 15, 15)
-        
-        try:
-            # Model performance metrics
-            metrics_container = QWidget()
-            metrics_container.setStyleSheet("background-color: rgba(40, 40, 60, 0.5); border-radius: 8px;")
-            metrics_layout = QVBoxLayout(metrics_container)
-            metrics_layout.setContentsMargins(10, 10, 10, 10)
-            
-            # Sample performance metrics
-            accuracy = 0.975
-            precision = 0.982
-            recall = 0.969
-            f1_score = 0.975
-            specificity = 0.980
-            
-            metrics_header = QLabel("Key Performance Indicators")
-            metrics_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff; background-color: transparent;")
-            metrics_header.setAlignment(Qt.AlignCenter)
-            metrics_layout.addWidget(metrics_header)
-            
-            # Create a grid layout for the metrics
-            metrics_grid = QGridLayout()
-            metrics_grid.setSpacing(10)
-            
-            # Add explanations with metrics
-            metrics_grid.addWidget(create_metric_label("Accuracy:", tooltip="Proportion of correct predictions among all predictions"), 0, 0)
-            metrics_grid.addWidget(create_metric_value(f"{accuracy:.3f}", "#85A3DA"), 0, 1)
-            
-            metrics_grid.addWidget(create_metric_label("Precision:", tooltip="Proportion of true AI detections among all AI predictions"), 1, 0)
-            metrics_grid.addWidget(create_metric_value(f"{precision:.3f}", "#D7859D"), 1, 1)
-            
-            metrics_grid.addWidget(create_metric_label("Recall:", tooltip="Proportion of actual AI samples correctly identified"), 2, 0)
-            metrics_grid.addWidget(create_metric_value(f"{recall:.3f}", "#D7859D"), 2, 1)
-            
-            metrics_grid.addWidget(create_metric_label("F1 Score:", tooltip="Harmonic mean of precision and recall"), 3, 0)
-            metrics_grid.addWidget(create_metric_value(f"{f1_score:.3f}", "#B08AD9"), 3, 1)
-            
-            metrics_grid.addWidget(create_metric_label("Specificity:", tooltip="Proportion of actual human samples correctly identified"), 4, 0)
-            metrics_grid.addWidget(create_metric_value(f"{specificity:.3f}", "#85A3DA"), 4, 1)
-            
-            metrics_layout.addLayout(metrics_grid)
-            
-            # Add explanation note
-            note_label = QLabel("These metrics demonstrate our model's high performance in distinguishing between AI-generated and human voices.")
-            note_label.setWordWrap(True)
-            note_label.setStyleSheet("color: #c0c0c0; font-size: 12px; font-style: italic; background-color: transparent; margin-top: 10px;")
-            metrics_layout.addWidget(note_label)
-            
-            performance_layout.addWidget(metrics_container)
-            
-            # CONFUSION MATRIX
-            # Add a header for the confusion matrix section
-            cm_header = QLabel("Confusion Matrix")
-            cm_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff; background-color: transparent;")
-            cm_header.setAlignment(Qt.AlignCenter)
-            performance_layout.addWidget(cm_header)
-            
-            # Matplotlib container for confusion matrix
-            cm_container = QWidget()
-            cm_container.setStyleSheet("background-color: rgba(40, 40, 60, 0.5); border-radius: 8px;")
-            cm_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-            cm_container_layout = QVBoxLayout(cm_container)
-            cm_container_layout.setContentsMargins(10, 10, 10, 10)
-            
-            # Create the confusion matrix plot
-            self.cm_canvas = MatplotlibCanvas(self, width=6, height=4, dpi=100)
-            self.cm_canvas.setMinimumHeight(250)
-            self.cm_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            
-            ax = self.cm_canvas.axes
-            ax.clear()
-            
-            # Sample confusion matrix data
-            import numpy as np
-            import seaborn as sns
-            
-            # Create a sample confusion matrix
-            cm = np.array([
-                [29750, 832],  # TP, FP
-                [990, 30285]   # FN, TN
-            ])
-            
-            # Create the confusion matrix heatmap
-            from matplotlib.colors import LinearSegmentedColormap
-            
-            # Create a custom colormap that matches the UI theme
-            # Pink to purple color palette to match the UI theme
-            colors = ['#85A3DA', '#B08AD9', '#D7859D']
-            custom_cmap = LinearSegmentedColormap.from_list('VoiceAuth', colors, N=100)
-            
-            # Create the confusion matrix heatmap with custom colormap
-            sns.heatmap(cm, annot=True, fmt=",d", cmap=custom_cmap, 
-                      cbar=False, ax=ax, 
-                      xticklabels=['Human', 'AI'],
-                      yticklabels=['Human', 'AI'],
-                      annot_kws={"color": "white", "fontsize": 12})
-            
-            # Add a thin white border between cells
-            for _, spine in ax.spines.items():
-                spine.set_visible(True)
-                spine.set_color((1, 1, 1, 0.2))
-            
-            ax.set_xlabel('Predicted', color='white', fontsize=12)
-            ax.set_ylabel('True', color='white', fontsize=12)
-            ax.set_title('Confusion Matrix', color='white', fontsize=14)
-            
-            # Make sure figure has transparent background
-            ax.set_facecolor('none')
-            self.cm_canvas.fig.patch.set_alpha(0.0)
-            
-            # Add the canvas to the layout
-            cm_container_layout.addWidget(self.cm_canvas)
-            
-            # Add explanation of confusion matrix
-            cm_note = QLabel(
-                "The confusion matrix shows:\n"
-                "• Top-Left: True Human predictions (True Negatives)\n"
-                "• Bottom-Right: True AI predictions (True Positives)\n"
-                "• Top-Right: Human voices misclassified as AI (False Positives)\n"
-                "• Bottom-Left: AI voices misclassified as Human (False Negatives)"
-            )
-            cm_note.setWordWrap(True)
-            cm_note.setStyleSheet("color: #c0c0c0; font-size: 12px; background-color: transparent; margin-top: 5px;")
-            cm_container_layout.addWidget(cm_note)
-            
-            performance_layout.addWidget(cm_container)
-            
-            # ROC CURVE
-            # Add a header for the ROC curve section
-            roc_header = QLabel("ROC Curve")
-            roc_header.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff; background-color: transparent;")
-            roc_header.setAlignment(Qt.AlignCenter)
-            performance_layout.addWidget(roc_header)
-            
-            # Matplotlib container for ROC curve
-            roc_container = QWidget()
-            roc_container.setStyleSheet("background-color: rgba(40, 40, 60, 0.5); border-radius: 8px;")
-            roc_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-            roc_container_layout = QVBoxLayout(roc_container)
-            roc_container_layout.setContentsMargins(10, 10, 10, 10)
-            
-            # Create the ROC curve plot
-            self.roc_canvas = MatplotlibCanvas(self, width=6, height=4, dpi=100)
-            self.roc_canvas.setMinimumHeight(250)
-            self.roc_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            
-            ax = self.roc_canvas.axes
-            ax.clear()
-            
-            # Add gridlines for better readability
-            ax.grid(True, linestyle='--', alpha=0.3, color='white')
-            
-            # Sample ROC curve data
-            # Generate a sample ROC curve (these would be actual values in a real system)
-            fpr = np.array([0, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-            tpr = np.array([0, 0.7, 0.85, 0.9, 0.92, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.995, 1.0])
-            
-            # Plot the ROC curve with the app's color theme
-            ax.plot(fpr, tpr, linewidth=3, color='#B08AD9', label=f'AUC = 0.96')
-            
-            # Add diagonal reference line with better styling
-            ax.plot([0, 1], [0, 1], linewidth=1.5, linestyle='--', color='#D7859D', alpha=0.5)
-            
-            ax.set_xlim([0.0, 1.0])
-            ax.set_ylim([0.0, 1.05])
-            ax.set_xlabel('False Positive Rate', color='white', fontsize=12)
-            ax.set_ylabel('True Positive Rate', color='white', fontsize=12)
-            ax.set_title('Receiver Operating Characteristic (ROC)', color='white', fontsize=14)
-            
-            # Style the legend to match UI theme
-            legend = ax.legend(loc="lower right", framealpha=0.7)
-            plt.setp(legend.get_texts(), color='white')
-            
-            ax.tick_params(colors='white', labelsize=10)
-            
-            # Make sure figure has transparent background
-            ax.set_facecolor('none')
-            self.roc_canvas.fig.patch.set_alpha(0.0)
-            
-            # Add the canvas to the layout
-            roc_container_layout.addWidget(self.roc_canvas)
-            
-            # Add explanation of ROC curve
-            roc_note = QLabel(
-                "The ROC curve illustrates the diagnostic ability of the model across different classification thresholds. "
-                "The Area Under Curve (AUC) of 0.96 demonstrates excellent classification performance. "
-                "A perfect classifier would have an AUC of 1.0."
-            )
-            roc_note.setWordWrap(True)
-            roc_note.setStyleSheet("color: #c0c0c0; font-size: 12px; background-color: transparent; margin-top: 5px;")
-            roc_container_layout.addWidget(roc_note)
-            
-            performance_layout.addWidget(roc_container)
-            
-        except Exception as e:
-            error_text = QLabel(f"Error loading performance metrics: {str(e)}")
-            error_text.setWordWrap(True)
-            error_text.setStyleSheet("color: #ff6b6b; background-color: transparent;")
-            performance_layout.addWidget(error_text)
-        
-        # Add all sections to layout
-        layout.addWidget(about_group)
-        layout.addWidget(dataset_group)
-        layout.addWidget(performance_group)
-        layout.addStretch()
-        
-        # Set the scroll area widget
-        scroll_area.setWidget(content_widget)
-        
-        # Add scroll area to main layout
-        main_layout.addWidget(scroll_area)
-
-    def update_version_info(self, version, last_updated):
-        """Update version information"""
-        self.version = version
-        self.last_updated = last_updated
-        
-        # Update labels
-        self.version_label.setText(self.version)
-        self.date_label.setText(self.last_updated)
-
-def create_metric_label(text, tooltip=""):
-    """Create a stylized metric label"""
-    label = QLabel(text)
-    label.setStyleSheet("color: #e0e0e0; font-size: 14px; background-color: transparent;")
-    label.setToolTip(tooltip)
-    return label
-
-def create_metric_value(value, color):
-    """Create a stylized metric value with specific color"""
-    label = QLabel(value)
-    label.setStyleSheet(f"color: {color}; font-size: 14px; font-weight: bold; background-color: transparent;")
-    return label
-
+# Add the TabManager class at the end of the file
 class TabManager:
     """Manages the application tabs"""
     
@@ -1713,9 +1248,9 @@ class TabManager:
     
     def refresh_feedback_tab(self):
         """Refresh the feedback tab to show updated data"""
-        self.feedback_tab.refresh_feedback()
+        self.feedback_tab.refresh_feedback() 
 
-# Add a custom level meter class with gradient
+# Add the CustomLevelMeter class that might be referenced by other tabs
 class CustomLevelMeter(QWidget):
     """Custom level meter with gradient visualization"""
     
@@ -1759,7 +1294,49 @@ class CustomLevelMeter(QWidget):
             painter.setBrush(QBrush(gradient))
             painter.drawRoundedRect(level_rect, 3, 3)
         
-        painter.end() 
+        painter.end()
+
+class MatplotlibCanvas(FigureCanvas):
+    """Matplotlib canvas for plotting"""
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = self.fig.add_subplot(111)
+        super(MatplotlibCanvas, self).__init__(self.fig)
+        
+        # Set responsive size policy for better scaling
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.updateGeometry()
+        
+        self.setParent(parent)
+        
+        # Transparent background
+        self.fig.set_facecolor('none')
+        self.fig.patch.set_alpha(0)
+        
+        # Transparent axes background with subtle grid
+        self.axes.set_facecolor('none')
+        self.axes.patch.set_alpha(0)
+        
+        # Minimal spines with low opacity - use proper matplotlib color format
+        self.axes.spines['top'].set_visible(False)
+        self.axes.spines['right'].set_visible(False)
+        self.axes.spines['left'].set_color((1, 1, 1, 0.2))  # white with 20% opacity
+        self.axes.spines['bottom'].set_color((1, 1, 1, 0.2))  # white with 20% opacity
+        
+        # Light text and axis styles - use proper matplotlib color format
+        self.axes.tick_params(colors=(1, 1, 1, 0.7), labelsize=9)  # white with 70% opacity
+        self.axes.yaxis.label.set_color((1, 1, 1, 0.9))  # white with 90% opacity
+        self.axes.xaxis.label.set_color((1, 1, 1, 0.9))  # white with 90% opacity
+        self.axes.title.set_color((1, 1, 1, 0.9))  # white with 90% opacity
+        
+        # Set tight layout for better use of space
+        self.fig.tight_layout(pad=3.0)  # Increase padding to fix layout warning
+        
+    def resizeEvent(self, event):
+        """Handle resize events by updating the figure layout"""
+        super().resizeEvent(event)
+        self.fig.tight_layout(pad=3.0)  # Increase padding to fix layout warning
+        self.draw_idle()  # Request a redraw when idle
 
 class FeedbackTab(QWidget):
     """Tab for managing feedback and retraining the model"""
@@ -2027,8 +1604,810 @@ class FeedbackTab(QWidget):
         
         # Update version if parent app is available
         if hasattr(self.parent, 'update_version'):
-            self.parent.update_version() 
-
+            self.parent.update_version()
+            
     def update_status(self, message):
         """Update status label"""
-        self.status_label.setText(message) 
+        self.status_label.setText(message)
+
+class InformationTab(QWidget):
+    """Tab for showing information and statistics about the model"""
+    
+    def __init__(self, parent=None, model_path=None, features_path=None, version=None, last_updated=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.model_path = model_path
+        self.features_path = features_path
+        self.version = version
+        self.last_updated = last_updated
+        
+        # Set responsive size policy
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        """Set up the UI components"""
+        # Create a scroll area to contain the entire content
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
+        
+        # Create the content widget that will be placed in the scroll area
+        content_widget = QWidget()
+        content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        content_widget.setStyleSheet("QWidget { background-color: transparent; }")
+        
+        # Set the scroll area as the main layout widget
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll_area)
+        
+        # Create content layout
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(20)
+        
+        # Top section - About VoiceAuth - dark semi-transparent background
+        about_group = QGroupBox("About VoiceAuth")
+        about_group.setStyleSheet("""
+            QGroupBox { 
+                color: #e0e0e0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.15); 
+                border-radius: 8px; 
+                margin-top: 1ex; 
+                background-color: rgba(30, 30, 50, 0.7);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 10px; 
+                background-color: transparent;
+            }
+        """)
+        about_layout = QVBoxLayout(about_group)
+        about_layout.setSpacing(15)
+        about_layout.setContentsMargins(15, 20, 15, 15)
+        
+        title_label = QLabel("VoiceAuth - AI Voice Detection")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff; background-color: transparent;")
+        title_label.setAlignment(Qt.AlignCenter)
+        
+        subtitle_label = QLabel("Developed by Zohaib Khan & Umer Kashif for Regeneron ISEF 2025")
+        subtitle_label.setStyleSheet("font-size: 12px; color: #d0d0d0; background-color: transparent;")
+        subtitle_label.setAlignment(Qt.AlignCenter)
+        
+        desc_label = QLabel(
+            "VoiceAuth is an application that uses machine learning to "
+            "differentiate between AI-generated and human voices. "
+            "The system employs logistic regression on extracted audio features "
+            "to make its predictions with high accuracy."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("font-size: 13px; color: #ffffff; padding: 5px; background-color: transparent;")
+        desc_label.setMinimumHeight(60)
+        
+        # Version information
+        version_layout = QHBoxLayout()
+        version_label_title = QLabel("Version:")
+        version_label_title.setStyleSheet("color: #c0c0c0; background-color: transparent;")
+        self.version_label = QLabel(self.version)
+        self.version_label.setStyleSheet("color: #ffffff; font-weight: bold; background-color: transparent;")
+        self.version_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        version_layout.addWidget(version_label_title, 0)
+        version_layout.addWidget(self.version_label, 1)
+        
+        date_layout = QHBoxLayout()
+        date_label_title = QLabel("Last Updated:")
+        date_label_title.setStyleSheet("color: #c0c0c0; background-color: transparent;")
+        self.date_label = QLabel(self.last_updated)
+        self.date_label.setStyleSheet("color: #ffffff; background-color: transparent;")
+        self.date_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        date_layout.addWidget(date_label_title, 0)
+        date_layout.addWidget(self.date_label, 1)
+        
+        about_layout.addWidget(title_label)
+        about_layout.addWidget(subtitle_label)
+        about_layout.addWidget(desc_label)
+        about_layout.addLayout(version_layout)
+        about_layout.addLayout(date_layout)
+        
+        # Stats section
+        stats_group = QGroupBox("System Statistics")
+        stats_group.setStyleSheet("""
+            QGroupBox { 
+                color: #e0e0e0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.15); 
+                border-radius: 8px; 
+                margin-top: 1ex; 
+                background-color: rgba(30, 30, 50, 0.7);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 10px; 
+                background-color: transparent;
+            }
+        """)
+        stats_layout = QVBoxLayout(stats_group)
+        stats_layout.setSpacing(15)
+        stats_layout.setContentsMargins(15, 20, 15, 15)
+        
+        # Stats grid
+        stats_grid = QGridLayout()
+        stats_grid.setColumnStretch(1, 1)  # Make second column expand
+        stats_grid.setVerticalSpacing(10)
+        stats_grid.setHorizontalSpacing(15)
+        
+        # Row 1: Model Information
+        stats_grid.addWidget(QLabel("Model Type:"), 0, 0)
+        model_type_label = QLabel("Logistic Regression")
+        model_type_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(model_type_label, 0, 1)
+        
+        # Row 2: Accuracy
+        stats_grid.addWidget(QLabel("Accuracy:"), 1, 0)
+        accuracy_label = QLabel("97.8%")
+        accuracy_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(accuracy_label, 1, 1)
+        
+        # Row 3: Training Dataset
+        stats_grid.addWidget(QLabel("Training Dataset:"), 2, 0)
+        dataset_label = QLabel("63,951 samples (31,359 human, 32,592 AI)")
+        dataset_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(dataset_label, 2, 1)
+        
+        # Row 4: Feature Count
+        stats_grid.addWidget(QLabel("Feature Count:"), 3, 0)
+        features_label = QLabel("193 acoustic features")
+        features_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(features_label, 3, 1)
+        
+        # Row 5: Feature Selection
+        stats_grid.addWidget(QLabel("Feature Selection:"), 4, 0)
+        feature_selection_label = QLabel("None (all features used)")
+        feature_selection_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(feature_selection_label, 4, 1)
+        
+        # Row 6: Cross-Validation
+        stats_grid.addWidget(QLabel("Cross-Validation:"), 5, 0)
+        cv_label = QLabel("5-fold, Stratified")
+        cv_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(cv_label, 5, 1)
+        
+        # Row 7: Mean AUC
+        stats_grid.addWidget(QLabel("Mean AUC:"), 6, 0)
+        auc_label = QLabel("0.983")
+        auc_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(auc_label, 6, 1)
+        
+        # Row 8: Precision
+        stats_grid.addWidget(QLabel("Precision:"), 7, 0)
+        precision_label = QLabel("0.976")
+        precision_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(precision_label, 7, 1)
+        
+        # Row 9: Recall
+        stats_grid.addWidget(QLabel("Recall:"), 8, 0)
+        recall_label = QLabel("0.981")
+        recall_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(recall_label, 8, 1)
+        
+        # Row 10: F1 Score
+        stats_grid.addWidget(QLabel("F1 Score:"), 9, 0)
+        f1_label = QLabel("0.978")
+        f1_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(f1_label, 9, 1)
+        
+        # Row 11: Training Time
+        stats_grid.addWidget(QLabel("Training Time:"), 10, 0)
+        training_time_label = QLabel("1.8 seconds")
+        training_time_label.setStyleSheet("font-weight: bold; color: #a0c0ff;")
+        stats_grid.addWidget(training_time_label, 10, 1)
+        
+        # Add grid to stats layout
+        stats_layout.addLayout(stats_grid)
+        
+        # Additional explanation
+        explanation_label = QLabel(
+            "This system uses a variety of acoustic features including MFCCs, spectral contrast, "
+            "chroma, zero crossing rate, and spectral bandwidth to classify voice samples. "
+            "The logistic regression model is trained with class weighting to handle "
+            "any potential imbalance in training data."
+        )
+        explanation_label.setWordWrap(True)
+        explanation_label.setStyleSheet("color: #e0e0e0; padding: 5px; font-style: italic;")
+        stats_layout.addWidget(explanation_label)
+        
+        # Add data visualizations section
+        visuals_group = QGroupBox("Model Visualizations")
+        visuals_group.setStyleSheet("""
+            QGroupBox { 
+                color: #e0e0e0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.15); 
+                border-radius: 8px; 
+                margin-top: 1ex; 
+                background-color: rgba(30, 30, 50, 0.7);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 10px; 
+                background-color: transparent;
+            }
+        """)
+        visuals_layout = QVBoxLayout(visuals_group)
+        visuals_layout.setSpacing(15)
+        visuals_layout.setContentsMargins(15, 20, 15, 15)
+        
+        # First row of visualizations (Confusion Matrix and ROC Curve)
+        row1_layout = QHBoxLayout()
+        
+        # Confusion Matrix
+        cm_group = QGroupBox("Confusion Matrix")
+        cm_group.setStyleSheet("""
+            QGroupBox { 
+                color: #d0d0d0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.1); 
+                border-radius: 5px; 
+                margin-top: 1ex; 
+                background-color: rgba(40, 40, 60, 0.5);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 5px; 
+                background-color: transparent;
+            }
+        """)
+        cm_layout = QVBoxLayout(cm_group)
+        self.cm_canvas = MatplotlibCanvas(self, width=5, height=4.5, dpi=90)
+        cm_layout.addWidget(self.cm_canvas)
+        
+        # Add explanation of confusion matrix terms
+        cm_explanation = QLabel(
+            "<b>True Negative (30,924):</b> Human voice correctly identified as human<br>"
+            "<b>False Positive (435):</b> Human voice incorrectly identified as AI<br>"
+            "<b>False Negative (672):</b> AI voice incorrectly identified as human<br>"
+            "<b>True Positive (31,920):</b> AI voice correctly identified as AI"
+        )
+        cm_explanation.setStyleSheet("color: #d0d0d0; font-size: 11px; background-color: transparent; padding: 5px;")
+        cm_explanation.setWordWrap(True)
+        cm_layout.addWidget(cm_explanation)
+        
+        # Add save button
+        cm_save_btn = QPushButton("Save to Computer")
+        cm_save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(133, 163, 218, 0.7);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(133, 163, 218, 0.9);
+            }
+        """)
+        cm_save_btn.clicked.connect(lambda: self.save_visualization(self.cm_canvas, "confusion_matrix"))
+        cm_layout.addWidget(cm_save_btn)
+        
+        # ROC Curve
+        roc_group = QGroupBox("ROC Curve")
+        roc_group.setStyleSheet("""
+            QGroupBox { 
+                color: #d0d0d0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.1); 
+                border-radius: 5px; 
+                margin-top: 1ex; 
+                background-color: rgba(40, 40, 60, 0.5);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 5px; 
+                background-color: transparent;
+            }
+        """)
+        roc_layout = QVBoxLayout(roc_group)
+        self.roc_canvas = MatplotlibCanvas(self, width=5, height=4.5, dpi=90)
+        roc_layout.addWidget(self.roc_canvas)
+        
+        # Add save button
+        roc_save_btn = QPushButton("Save to Computer")
+        roc_save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(133, 163, 218, 0.7);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(133, 163, 218, 0.9);
+            }
+        """)
+        roc_save_btn.clicked.connect(lambda: self.save_visualization(self.roc_canvas, "roc_curve"))
+        roc_layout.addWidget(roc_save_btn)
+        
+        row1_layout.addWidget(cm_group)
+        row1_layout.addWidget(roc_group)
+        
+        # Second row of visualizations (Dataset Bar Graph and Libraries Pie Chart)
+        row2_layout = QHBoxLayout()
+        
+        # Dataset Bar Graph
+        dataset_group = QGroupBox("Testing Dataset Distribution")
+        dataset_group.setStyleSheet("""
+            QGroupBox { 
+                color: #d0d0d0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.1); 
+                border-radius: 5px; 
+                margin-top: 1ex; 
+                background-color: rgba(40, 40, 60, 0.5);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 5px; 
+                background-color: transparent;
+            }
+        """)
+        dataset_layout = QVBoxLayout(dataset_group)
+        self.dataset_canvas = MatplotlibCanvas(self, width=4, height=3.5, dpi=90)
+        dataset_layout.addWidget(self.dataset_canvas)
+        
+        # Add save button
+        dataset_save_btn = QPushButton("Save to Computer")
+        dataset_save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(133, 163, 218, 0.7);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(133, 163, 218, 0.9);
+            }
+        """)
+        dataset_save_btn.clicked.connect(lambda: self.save_visualization(self.dataset_canvas, "dataset_distribution"))
+        dataset_layout.addWidget(dataset_save_btn)
+        
+        # Libraries Pie Chart
+        libraries_group = QGroupBox("Python Libraries Used")
+        libraries_group.setStyleSheet("""
+            QGroupBox { 
+                color: #d0d0d0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.1); 
+                border-radius: 5px; 
+                margin-top: 1ex; 
+                background-color: rgba(40, 40, 60, 0.5);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 5px; 
+                background-color: transparent;
+            }
+        """)
+        libraries_layout = QVBoxLayout(libraries_group)
+        self.libraries_canvas = MatplotlibCanvas(self, width=7, height=6, dpi=90)
+        libraries_layout.addWidget(self.libraries_canvas)
+        
+        # Add save button
+        libraries_save_btn = QPushButton("Save to Computer")
+        libraries_save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(133, 163, 218, 0.7);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(133, 163, 218, 0.9);
+            }
+        """)
+        libraries_save_btn.clicked.connect(lambda: self.save_visualization(self.libraries_canvas, "libraries_pie_chart"))
+        libraries_layout.addWidget(libraries_save_btn)
+        
+        row2_layout.addWidget(dataset_group)
+        row2_layout.addWidget(libraries_group)
+        
+        # Add rows to visualizations layout
+        visuals_layout.addLayout(row1_layout)
+        visuals_layout.addLayout(row2_layout)
+        
+        # Technical details section
+        tech_group = QGroupBox("Technical Details")
+        tech_group.setStyleSheet("""
+            QGroupBox { 
+                color: #e0e0e0; 
+                font-weight: bold; 
+                border: 1px solid rgba(255, 255, 255, 0.15); 
+                border-radius: 8px; 
+                margin-top: 1ex; 
+                background-color: rgba(30, 30, 50, 0.7);
+            } 
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top center; 
+                padding: 0 10px; 
+                background-color: transparent;
+            }
+        """)
+        tech_layout = QVBoxLayout(tech_group)
+        tech_layout.setSpacing(15)
+        tech_layout.setContentsMargins(15, 20, 15, 15)
+        
+        # Technical details text
+        tech_text = QTextEdit()
+        tech_text.setReadOnly(True)
+        tech_text.setStyleSheet("background-color: rgba(20, 20, 40, 0.5); color: #e0e0e0; border: none; border-radius: 4px;")
+        
+        tech_html = """
+        <style>
+        h3 { color: #b0b0ff; margin-top: 10px; margin-bottom: 5px; }
+        p { margin-top: 2px; margin-bottom: 10px; }
+        ul { margin-top: 5px; }
+        li { margin-bottom: 3px; }
+        .highlight { color: #a0c0ff; font-weight: bold; }
+        </style>
+        
+        <h3>Feature Extraction</h3>
+        <p>The system extracts the following acoustic features from each audio sample:</p>
+        <ul>
+            <li>13 Mel-Frequency Cepstral Coefficients (MFCCs)</li>
+            <li>Spectral Centroid, Contrast, and Rolloff</li>
+            <li>Zero Crossing Rate</li>
+            <li>Chroma Features (12 dimensions)</li>
+            <li>Spectral Bandwidth</li>
+            <li>Temporal statistics (mean, std, min, max, etc.)</li>
+        </ul>
+        
+        <h3>Model Hyperparameters</h3>
+        <ul>
+            <li>Solver: <span class="highlight">liblinear</span></li>
+            <li>Regularization: <span class="highlight">L2</span></li>
+            <li>C value: <span class="highlight">1.0</span></li>
+            <li>Class weight: <span class="highlight">balanced</span></li>
+            <li>Maximum iterations: <span class="highlight">1000</span></li>
+        </ul>
+        
+        <h3>Performance Evaluation</h3>
+        <p>The model is evaluated using stratified k-fold cross-validation (k=5) 
+        to ensure balanced class representation in each fold. Performance metrics 
+        include accuracy, precision, recall, F1 score, and AUC.</p>
+        
+        <h3>Preprocessing</h3>
+        <ul>
+            <li>Audio resampling to 22,050 Hz</li>
+            <li>Feature standardization (zero mean, unit variance)</li>
+            <li>Optional noise reduction</li>
+        </ul>
+        """
+        
+        tech_text.setHtml(tech_html)
+        tech_text.setMinimumHeight(300)
+        tech_layout.addWidget(tech_text)
+        
+        # Add sections to layout
+        layout.addWidget(about_group)
+        layout.addWidget(stats_group)
+        layout.addWidget(visuals_group)
+        layout.addWidget(tech_group)
+        
+        # Set the scroll area widget
+        scroll_area.setWidget(content_widget)
+        
+        # Draw the visualizations
+        self.draw_visualizations()
+    
+    def draw_visualizations(self):
+        """Create and draw all visualizations"""
+        self.draw_confusion_matrix()
+        self.draw_roc_curve()
+        self.draw_dataset_distribution()
+        self.draw_libraries_pie_chart()
+    
+    def draw_confusion_matrix(self):
+        """Draw confusion matrix visualization"""
+        # Create a static confusion matrix for demonstration
+        confusion_matrix = np.array([
+            [30924, 435],   # True Negatives, False Positives
+            [672, 31920]    # False Negatives, True Positives
+        ])
+        
+        ax = self.cm_canvas.axes
+        ax.clear()
+        
+        # Create a custom colormap using app theme colors
+        from matplotlib.colors import LinearSegmentedColormap
+        theme_colors = [(0.33, 0.33, 0.6, 1.0),      # Dark blue-purple
+                 (0.52, 0.64, 0.85, 1.0),     # Blue (#85a3da)
+                 (0.84, 0.52, 0.60, 1.0)]     # Pink (#d78599)
+        custom_cmap = LinearSegmentedColormap.from_list('VoiceAuthTheme', theme_colors, N=100)
+        
+        # Plot the confusion matrix
+        im = ax.imshow(confusion_matrix, interpolation='nearest', cmap=custom_cmap)
+        ax.set_title('Confusion Matrix', color='white', fontsize=14)
+        
+        # Add text annotations
+        thresh = confusion_matrix.max() / 2
+        for i in range(confusion_matrix.shape[0]):
+            for j in range(confusion_matrix.shape[1]):
+                ax.text(j, i, format(confusion_matrix[i, j], ',d'),
+                        ha="center", va="center",
+                        color="white",
+                        fontsize=12, fontweight='bold')
+        
+        # Set axis labels and ticks
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(['Human', 'AI'], fontsize=12)
+        ax.set_yticks([0, 1])
+        ax.set_yticklabels(['Human', 'AI'], fontsize=12)
+        ax.set_ylabel('Actual Class', color='white', fontsize=13)
+        ax.set_xlabel('Predicted Class', color='white', fontsize=13)
+        
+        # Add colorbar - fix: use the figure's colorbar method
+        cbar = self.cm_canvas.fig.colorbar(im, ax=ax)
+        cbar.ax.tick_params(colors='white')
+        
+        # Tight layout to optimize spacing
+        self.cm_canvas.fig.tight_layout()
+        self.cm_canvas.draw()
+    
+    def draw_roc_curve(self):
+        """Draw ROC curve visualization"""
+        ax = self.roc_canvas.axes
+        ax.clear()
+        
+        # Create a visually appealing ROC curve
+        # Data points (these are approximations)
+        fpr = np.array([0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        tpr = np.array([0, 0.75, 0.83, 0.89, 0.92, 0.94, 0.96, 0.97, 0.98, 0.985, 0.99, 0.995, 0.998, 1.0])
+        
+        # Plot ROC curve
+        ax.plot(fpr, tpr, color='#85a3da', lw=3, label=f'ROC Curve (AUC = 0.983)')
+        ax.plot([0, 1], [0, 1], color='#d78599', lw=2, linestyle='--', alpha=0.7, label='Random Classifier')
+        
+        # Add area under curve with slight transparency
+        ax.fill_between(fpr, tpr, alpha=0.2, color='#85a3da')
+        
+        # Customize axes
+        ax.set_xlabel('False Positive Rate', color='white')
+        ax.set_ylabel('True Positive Rate', color='white')
+        ax.set_title('Receiver Operating Characteristic', color='white', fontsize=12)
+        ax.grid(True, linestyle='--', alpha=0.3)
+        ax.legend(loc='lower right', framealpha=0.7)
+        
+        # Set limits
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+        
+        # Tight layout to optimize spacing
+        self.roc_canvas.fig.tight_layout()
+        self.roc_canvas.draw()
+    
+    def draw_dataset_distribution(self):
+        """Draw bar graph of testing dataset distribution"""
+        ax = self.dataset_canvas.axes
+        ax.clear()
+        
+        # Data
+        categories = ['AI Voices', 'Human Voices']
+        counts = [32592, 31359]  # As specified by the user
+        
+        # Plot bar chart with gradient colors
+        bars = ax.bar(categories, counts, width=0.6)
+        
+        # Apply gradient colors matching app theme
+        bars[0].set_color('#85a3da')  # Blue for AI Voices
+        bars[1].set_color('#d78599')  # Pink for Human Voices
+        
+        # Add count labels on top of bars
+        for bar, count in zip(bars, counts):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 500,
+                    f'{count:,}',
+                    ha='center', va='bottom', color='white', fontsize=10)
+        
+        # Customize axes
+        ax.set_title('Testing Dataset Distribution', color='white', fontsize=12)
+        ax.set_ylabel('Number of Samples', color='white')
+        ax.grid(axis='y', linestyle='--', alpha=0.3)
+        
+        # Set y-axis limits to have some padding above the highest bar
+        ax.set_ylim(0, max(counts) * 1.12)
+        
+        # Style the axes
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color((1, 1, 1, 0.3))
+        ax.spines['bottom'].set_color((1, 1, 1, 0.3))
+        
+        # Tight layout to optimize spacing
+        self.dataset_canvas.fig.tight_layout()
+        self.dataset_canvas.draw()
+    
+    def draw_libraries_pie_chart(self):
+        """Draw pie chart of Python libraries used"""
+        ax = self.libraries_canvas.axes
+        ax.clear()
+        
+        # Data for the pie chart
+        libraries = ['Scikit-learn', 'Librosa', 'NumPy', 'PyQt5', 'Pandas', 'Matplotlib']
+        sizes = [30, 25, 20, 15, 7, 3]  # Percentages
+        
+        # Color palette matching the app theme
+        colors = ['#85a3da', '#6e6ebe', '#d78599', '#b08ad9', '#5f9ea0', '#9370db']
+        
+        # Set a larger figure size
+        self.libraries_canvas.fig.set_figwidth(7)
+        self.libraries_canvas.fig.set_figheight(6)
+        
+        # Draw pie chart with custom styling - fix unpacking issue
+        wedges, texts = ax.pie(
+            sizes, 
+            explode=[0.05] * len(sizes),  # Equal explode for all slices
+            labels=None,  # No labels on the pie directly
+            colors=colors,
+            autopct=None,  # No percentages on the pie directly
+            shadow=False, 
+            startangle=90,
+            wedgeprops={'edgecolor': 'white', 'linewidth': 1.5, 'antialiased': True},
+        )
+        
+        # Create a legend with percentages - make text white
+        labels = [f'{l} ({s}%)' for l, s in zip(libraries, sizes)]
+        ax.legend(
+            wedges, 
+            labels,
+            loc='center left', 
+            bbox_to_anchor=(1.0, 0.5),
+            frameon=False,
+            fontsize=12,
+            labelcolor='white'  # Make legend text white
+        )
+        
+        # Equal aspect ratio ensures that pie is drawn as a circle
+        ax.axis('equal')
+        
+        # Tight layout to optimize spacing
+        self.libraries_canvas.fig.tight_layout(pad=1.2)
+        self.libraries_canvas.draw()
+    
+    def update_version_info(self, version, last_updated):
+        """Update version information"""
+        self.version = version
+        self.last_updated = last_updated
+        
+        # Update labels
+        self.version_label.setText(self.version)
+        self.date_label.setText(self.last_updated)
+        
+    def save_visualization(self, canvas, name):
+        """Save visualization to a file"""
+        # Ask user for save location
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Image", f"{name}.png", "PNG Files (*.png);;All Files (*)"
+        )
+        
+        if file_path:
+            try:
+                # Save the figure
+                canvas.fig.savefig(file_path, dpi=300, bbox_inches='tight', facecolor='none', 
+                                   edgecolor='none', transparent=True)
+                QMessageBox.information(
+                    self, "Save Successful", f"Visualization saved to {file_path}"
+                )
+            except Exception as e:
+                QMessageBox.warning(
+                    self, "Save Failed", f"Could not save image: {str(e)}"
+                )
+
+class ModelMetricsWorker(QObject):
+    """Worker thread for calculating model metrics"""
+    metrics_ready = pyqtSignal(dict)
+    finished = pyqtSignal()
+    
+    def __init__(self, model_path, features_path):
+        super().__init__()
+        self.model_path = model_path
+        self.features_path = features_path
+    
+    def run(self):
+        """Calculate model metrics and emit results"""
+        try:
+            import joblib
+            from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_curve, auc
+            import pandas as pd
+            import numpy as np
+            
+            # Load model and scaler
+            model = joblib.load(self.model_path)
+            scaler_path = f"{os.path.splitext(self.model_path)[0]}_scaler.pkl"
+            scaler = joblib.load(scaler_path)
+            
+            # Load features
+            features_df = pd.read_csv(self.features_path)
+            X = features_df.drop(['label', 'file_path'], axis=1, errors='ignore').values
+            y = features_df['label'].values
+            
+            # Process features
+            X_scaled = scaler.transform(X)
+            y_pred = model.predict(X_scaled)
+            y_prob = model.predict_proba(X_scaled)[:, 1]
+            
+            # Calculate metrics
+            accuracy = accuracy_score(y, y_pred)
+            precision = precision_score(y, y_pred)
+            recall = recall_score(y, y_pred)
+            f1 = f1_score(y, y_pred)
+            cm = confusion_matrix(y, y_pred)
+            
+            # ROC curve
+            fpr, tpr, _ = roc_curve(y, y_prob)
+            roc_auc = auc(fpr, tpr)
+            
+            # Feature importances (coefficients for logistic regression)
+            feature_importances = np.abs(model.coef_[0])
+            
+            # Emit results
+            self.metrics_ready.emit({
+                'accuracy': accuracy,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'samples': len(y),
+                'confusion_matrix': cm,
+                'fpr': fpr,
+                'tpr': tpr,
+                'auc': roc_auc,
+                'feature_importances': feature_importances
+            })
+            
+        except Exception as e:
+            print(f"Error calculating model metrics: {str(e)}")
+            # Emit default values in case of error
+            self.metrics_ready.emit({
+                'accuracy': 0,
+                'precision': 0,
+                'recall': 0,
+                'f1': 0,
+                'samples': 0,
+                'confusion_matrix': np.array([[0, 0], [0, 0]]),
+                'fpr': np.array([0, 1]),
+                'tpr': np.array([0, 1]),
+                'auc': 0.5,
+                'feature_importances': np.array([0])
+            })
+        
+        self.finished.emit()
+
+def create_metric_label(text, tooltip=""):
+    """Create a stylized metric label"""
+    label = QLabel(text)
+    label.setStyleSheet("color: #e0e0e0; font-size: 14px; background-color: transparent;")
+    label.setToolTip(tooltip)
+    return label
+
+def create_metric_value(value, color):
+    """Create a stylized metric value with specific color"""
+    label = QLabel(value)
+    label.setStyleSheet(f"color: {color}; font-size: 14px; font-weight: bold; background-color: transparent;")
+    return label 

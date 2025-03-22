@@ -21,16 +21,17 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from animations import TabAnimator
 from simple_startup import run_simple_startup
+from utils import get_media_path, get_output_path, get_model_path
 
 import tabs  # Import tabs module
 
 # Global constants
 VERSION = "1.2.9"
 LAST_UPDATED = "March 22, 2025"
-DEFAULT_MODEL_PATH = "output/models/voice_classifier.pkl"
-DEFAULT_FEATURES_PATH = "output/features.csv"
-FEEDBACK_FILE = "output/models/feedback_data.csv"
-VERSION_FILE = "output/version_info.json"
+DEFAULT_MODEL_PATH = get_model_path("voice_classifier.pkl")
+DEFAULT_FEATURES_PATH = get_output_path("features.csv")
+FEEDBACK_FILE = get_model_path("feedback_data.csv")
+VERSION_FILE = get_output_path("version_info.json")
 
 # Gradient Text Label for main UI
 class StaticGradientLabel(QLabel):
@@ -227,7 +228,7 @@ class VoiceAuthApp(QMainWindow):
         header_layout.setAlignment(Qt.AlignCenter)  # Center the entire layout
         
         # Create logo widget with proper size
-        self.logo_widget = LogoWidget(header_container, logo_path="media/logo-no-shadow.png", scale=1.2)
+        self.logo_widget = LogoWidget(header_container, logo_path=get_media_path("logo-no-shadow.png"), scale=1.2)
         self.logo_widget.setMinimumHeight(180)
         self.logo_widget.setMaximumHeight(220)
         self.logo_widget.setMinimumWidth(180)
@@ -236,7 +237,7 @@ class VoiceAuthApp(QMainWindow):
         
         # Create app name label to right of logo
         self.app_name = QLabel()
-        pixmap = QPixmap("media/text-only-white.png")
+        pixmap = QPixmap(get_media_path("text-only-white.png"))
         scaled_pixmap = pixmap.scaled(int(pixmap.width()*0.4), int(pixmap.height()*0.4), 
                                      Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.app_name.setPixmap(scaled_pixmap)

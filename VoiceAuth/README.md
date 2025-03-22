@@ -1,34 +1,59 @@
-# Voice Classifier Application
+# VoiceAuth - AI Voice Detection System
 
-A desktop application that uses logistic regression to differentiate between AI-generated and human voices based on audio samples.
+A desktop application that uses machine learning to differentiate between AI-generated and human voices based on audio samples. VoiceAuth employs logistic regression and advanced audio feature extraction to provide accurate classification of voice samples.
 
 ## Features
 
-- Feature extraction from audio files (WAV, MP3, OGG, FLAC)
-- Logistic regression model training with hyperparameter optimization
-- Real-time voice classification
-- User-friendly GUI interface
-- Hardware acceleration through parallel processing
-- Feature selection for better performance
-- Visualizations of feature importance
-- Feedback mechanism to improve model accuracy over time
-- On-demand model retraining with collected feedback
+- ✅ **Audio Processing**: Extract features from various audio formats (WAV, MP3, OGG, FLAC)
+- 🧠 **Machine Learning**: Logistic regression model with hyperparameter optimization
+- 🔍 **Real-time Classification**: Analyze and classify voice samples instantly
+- ⚡ **Performance**: Hardware acceleration through parallel processing
+- 📊 **Visualization**: Feature importance and model performance metrics
+- 🔄 **Feedback System**: Continuously improve model accuracy with user feedback
+- 💾 **Cross-Platform Support**: Works on Windows, macOS, and Linux
+
+## Screenshots
+
+*[Screenshots would be included here]*
 
 ## Installation
 
-1. Install Python 3.8+ if not already installed
-2. Clone this repository
-3. Install dependencies:
+### Prerequisites
 
-```
-pip install -r requirements.txt
-```
+- Python 3.8 or higher
+
+### Setup
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/VoiceAuth.git
+   cd VoiceAuth
+   ```
+
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Run the application:
+   ```
+   python run_voiceauth.py
+   ```
 
 ## Usage
 
-### Preparing Your Dataset
+### Running the Application
 
-Organize your dataset in the following structure:
+VoiceAuth features a user-friendly interface with several tabs:
+
+1. **Import Sample Tab**: Import audio files for classification
+2. **Record Sample Tab**: Record your voice directly for classification
+3. **Feedback Tab**: Provide feedback on classification results to improve the model
+4. **Information Tab**: View model statistics and performance metrics
+
+### Sample Dataset Structure
+
+For training the model, organize your dataset as follows:
 ```
 dataset_folder/
 ├── ai_generated/  (folder containing AI-generated voice samples)
@@ -41,97 +66,92 @@ dataset_folder/
     └── ...
 ```
 
-### Running the Application
-
-Run the main application:
-
-```
-python app.py
-```
-
-### Step 1: Feature Extraction
-
-1. In the "Feature Extraction" tab, browse to select your dataset folder
-2. Verify that folder names for AI and human samples are correct
-3. Set the number of parallel jobs for processing (-1 uses all available cores)
-4. Set the output path for the extracted features
-5. Click "Extract Features" to start the process
-
-### Step 2: Model Training
-
-1. In the "Model Training" tab, the features file from the previous step should be automatically loaded
-2. Select whether to use feature selection
-3. Set the number of parallel jobs for training
-4. Set the output path for the trained model
-5. Click "Train Model" to start training
-
-### Step 3: Voice Classification
-
-1. In the "Voice Classification" tab, the trained model from the previous step should be automatically loaded
-2. Browse to select an audio file to classify
-3. Click "Classify Audio" to analyze the file
-4. View the results showing whether the voice is AI-generated or human, along with confidence level
-
-### Step 4: Provide Feedback
-
-After classification, you can provide feedback to improve the model:
-
-1. Select "Yes, prediction was correct" if the classification was accurate
-2. Or select "No, this is actually:" and choose the correct class from the dropdown if the prediction was wrong
-3. Click "Submit Feedback" to send your feedback
-4. The model will automatically update after collecting sufficient feedback samples (currently set to 5 samples)
-5. Alternatively, click "Force Retrain Model" to immediately retrain the model with all collected feedback without waiting for 5 samples
-
 ## Technical Details
+
+### Path Management System
+
+VoiceAuth uses a robust path management system to ensure compatibility across different environments, particularly when shared via GitHub. The system:
+
+- **Automatically determines the base directory**: Works whether running from source, as a compiled executable, or from any relative directory
+- **Standardizes path access**: All file paths are accessed through utility functions, not hardcoded strings
+- **Creates necessary directories**: Output and model directories are automatically created if they don't exist
+- **Cross-platform compatibility**: Paths are normalized for the operating system in use
+
+Key path utility functions:
+
+- `get_base_dir()`: Gets the base application directory
+- `get_resource_path(relative_path)`: Gets the absolute path to any resource
+- `get_media_path(filename)`: Gets the path to media files
+- `get_output_path(filename)`: Gets the path to output files or directories
+- `get_model_path(filename)`: Gets the path to model files
 
 ### Feature Extraction
 
-The application extracts various audio features including:
+VoiceAuth extracts various audio features using the librosa library:
 - MFCCs (Mel-Frequency Cepstral Coefficients)
-- Spectral Centroid
-- Spectral Contrast
-- Spectral Rolloff
+- Spectral Centroid, Contrast, Rolloff
 - Zero Crossing Rate
 - Chroma Features
 - Spectral Bandwidth
 - Tempo and Beat Features
 - Mel Spectrogram
 
-### Model Architecture
+### Machine Learning Model
 
-- Standard scaling for feature normalization
-- Optional feature selection using SelectFromModel
-- Logistic regression classifier with hyperparameter tuning
-- Grid search for finding optimal parameters
-- Performance evaluation using accuracy, precision, recall, and F1-score
+- **Preprocessing**: Standard scaling for feature normalization
+- **Feature Selection**: Optional using SelectFromModel
+- **Model**: Logistic regression with hyperparameter tuning
+- **Evaluation**: Uses accuracy, precision, recall, and F1-score
 
-### Feedback Mechanism
+### Feedback System
 
 The application includes an adaptive learning system that:
 - Collects user feedback on classification results
 - Stores correctly labeled samples
-- Automatically retrains the model when sufficient feedback data is collected (5 samples by default)
-- Allows manual triggering of retraining with any number of feedback samples
-- Combines original training data with feedback data for improved accuracy
-- Updates the model in real-time without requiring manual retraining
+- Automatically retrains the model when sufficient feedback data is collected
+- Updates the model in real-time
 
-## Hardware Acceleration
+## Development
 
-The application uses parallel processing for both feature extraction and model training to utilize all available CPU cores, significantly speeding up processing time for large datasets.
+### Project Structure
 
-## Requirements
+- `voiceauth.py`: Main application module
+- `ui_components.py`: UI components and widgets
+- `simple_model.py`: Machine learning model implementation
+- `audio_processor.py`: Audio processing and feature extraction
+- `batch_process.py`: Batch processing of audio samples
+- `tabs.py`: Implementation of application tabs
+- `utils.py`: Utility functions, including path management
+- `media/`: Contains graphics and media assets
+- `output/`: Contains generated files (features, models)
 
-- Python 3.8+
-- NumPy
-- Pandas
-- scikit-learn
-- librosa
-- matplotlib
-- soundfile
-- PyQt5
-- tqdm
-- joblib
+### Extending the Application
+
+To add new features:
+
+1. For new UI components, add them to `ui_components.py`
+2. For new tabs, extend the functionality in `tabs.py`
+3. For new model features, modify `simple_model.py`
+4. For additional audio processing, update `audio_processor.py`
+
+## Troubleshooting
+
+### Common Issues
+
+- **Media files not found**: If you see errors about missing media files, ensure the `media` directory is in the same location as the application.
+- **Model loading errors**: Make sure the model has been trained and the appropriate model files exist in the output directory.
+- **Audio recording issues**: Check your microphone permissions and settings.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgements
+
+- [librosa](https://librosa.org/) for audio feature extraction
+- [scikit-learn](https://scikit-learn.org/) for machine learning components
+- [PyQt5](https://www.riverbankcomputing.com/software/pyqt/) for the GUI framework 

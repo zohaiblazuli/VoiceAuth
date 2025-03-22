@@ -1,6 +1,11 @@
 from PyQt5.QtWidgets import QWidget, QLabel, QSizePolicy
 from PyQt5.QtGui import QPainter, QColor, QLinearGradient, QPalette, QFont, QPixmap, QBrush
 from PyQt5.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, pyqtProperty
+import sys
+import os
+import math
+import random
+from utils import get_media_path
 
 class GradientAnimatedBackground(QWidget):
     """
@@ -129,35 +134,30 @@ class GradientAnimatedBackground(QWidget):
             print(f"Error in blend_colors: {e}")
             return QColor(30, 46, 94)  # Return default color on error
 
-class LogoWidget(QWidget):
-    """Widget to display the VoiceAuth logo with proper scaling and alignment"""
-    def __init__(self, parent=None, logo_path="media/logo-no-shadow.png", scale=0.85):
+class LogoWidget(QLabel):
+    """
+    A widget that displays the logo with a drop shadow effect
+    """
+    
+    def __init__(self, parent=None, logo_path=None, scale=0.85):
         super().__init__(parent)
-        self.logo_path = logo_path
-        self.scale = scale
-        self.logo_label = QLabel(self)
-        self.logo_label.setAlignment(Qt.AlignCenter)
-        self.original_pixmap = None
-        self.last_width = 0
-        self.last_height = 0
         
-        # Set proper size policy for responsive scaling
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setMinimumHeight(80)
-        
-        # Apply transparent background
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("background: transparent;")
-        
-        # Load logo with a small delay to ensure parent widget is initialized
-        QTimer.singleShot(100, self.setup_logo)
+        # Use default logo path if none provided
+        if logo_path is None:
+            logo_path = get_media_path("logo-no-shadow.png")
+            
+        self.pixmap = QPixmap(logo_path)
+        self.scale_factor = scale
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet("background-color: transparent;")
+        self.setup_logo()
         
     def setup_logo(self):
         """Load and set up the logo"""
         # Load logo pixmap
-        self.original_pixmap = QPixmap(self.logo_path)
-        if self.original_pixmap.isNull():
-            print(f"Error: Could not load logo from {self.logo_path}")
+        self.pixmap = QPixmap(self.pixmap)
+        if self.pixmap.isNull():
+            print(f"Error: Could not load logo from {self.pixmap}")
             return
         
         # Apply initial scaling
@@ -165,27 +165,19 @@ class LogoWidget(QWidget):
         
     def update_logo_size(self):
         """Update logo size based on current widget size"""
-        if self.original_pixmap is None or self.original_pixmap.isNull():
+        if self.pixmap is None or self.pixmap.isNull():
             return
             
         # Get current dimensions
         current_width = self.width()
         current_height = self.height()
         
-        # Skip update if dimensions haven't changed significantly
-        if (abs(current_width - self.last_width) < 5 and 
-            abs(current_height - self.last_height) < 5):
-            return
-            
-        self.last_width = current_width
-        self.last_height = current_height
-        
         # Calculate maximum dimensions while maintaining aspect ratio
-        max_height = min(current_height, 150) * self.scale  # Limit maximum height
-        max_width = current_width * self.scale
+        max_height = min(current_height, 150) * self.scale_factor  # Limit maximum height
+        max_width = current_width * self.scale_factor
         
         # Scale pixmap maintaining aspect ratio
-        scaled_pixmap = self.original_pixmap.scaled(
+        scaled_pixmap = self.pixmap.scaled(
             int(max_width), 
             int(max_height),
             Qt.KeepAspectRatio,
@@ -193,13 +185,13 @@ class LogoWidget(QWidget):
         )
         
         # Update the logo label
-        self.logo_label.setPixmap(scaled_pixmap)
-        self.logo_label.setFixedSize(scaled_pixmap.width(), scaled_pixmap.height())
+        self.setPixmap(scaled_pixmap)
+        self.setFixedSize(scaled_pixmap.width(), scaled_pixmap.height())
         
         # Center the logo label
-        self.logo_label.move(
-            int((current_width - self.logo_label.width()) / 2),
-            int((current_height - self.logo_label.height()) / 2)
+        self.move(
+            int((current_width - self.width()) / 2),
+            int((current_height - self.height()) / 2)
         )
         
     def resizeEvent(self, event):

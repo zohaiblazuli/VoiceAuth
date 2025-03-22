@@ -2,7 +2,11 @@ import os
 import numpy as np
 import pandas as pd
 import librosa
+import soundfile as sf
 from tqdm import tqdm
+import time
+import concurrent.futures
+from utils import get_output_path  # Import path utilities
 import argparse
 
 def extract_features(file_path, n_mfcc=20, n_mels=64, frames=64):
@@ -135,33 +139,117 @@ def process_files_in_batches(dataset_path, ai_folder='ai', human_folder='human',
         
     print(f"All batches processed. Features saved to {output_file}")
 
+def batch_process_dataset(dataset_path, ai_folder='ai_generated', human_folder='human', jobs=-1, 
+                         batch_size=100, output_file=None):
+    """
+    Process the entire dataset in batches with progress tracking
+
+    Parameters:
+    -----------
+    dataset_path : str
+        Path to the dataset folder containing ai_folder and human_folder
+    ai_folder : str
+        Name of the folder containing AI-generated samples
+    human_folder : str
+        Name of the folder containing human voice samples
+    jobs : int
+        Number of parallel jobs to run (-1 for all cores)
+    batch_size : int
+        Number of files to process in each batch
+    output_file : str
+        Path to the output CSV file, defaults to 'features.csv' in the output directory
+    """
+    if output_file is None:
+        output_file = get_output_path('features.csv')
+    
+    # Get all file paths
+    ai_path = os.path.join(dataset_path, ai_folder)
+    human_path = os.path.join(dataset_path, human_folder)
+    
+    ai_files = [os.path.join(ai_path, f) for f in os.listdir(ai_path) 
+                if f.endswith(('.wav', '.mp3', '.ogg', '.flac'))]
+    human_files = [os.path.join(human_path, f) for f in os.listdir(human_path) 
+                  if f.endswith(('.wav', '.mp3', '.ogg', '.flac'))]
+    
+    # Create lists for files and labels
+    all_files = ai_files + human_files
+    all_labels = [1] * len(ai_files) + [0] * len(human_files)
+    
+    # Initialize empty dataframe for features
+    feature_df = None
+    feature_columns = None
+    
+    # Process in batches
+    total_batches = (len(all_files) + batch_size - 1) // batch_size
+    
+    for batch_idx in range(total_batches):
+        print(f"Processing batch {batch_idx+1}/{total_batches}")
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, len(all_files))
+        
+        batch_files = all_files[start_idx:end_idx]
+        batch_labels = all_labels[start_idx:end_idx]
+        
+        features_list = []
+        files_processed = []
+        labels_processed = []
+        
+        for i, (file_path, label) in enumerate(tqdm(zip(batch_files, batch_labels), 
+                                                   total=len(batch_files),
+                                                   desc=f"Batch {batch_idx+1}")):
+            features = extract_features(file_path)
+            if features is not None:
+                features_list.append(features)
+                files_processed.append(file_path)
+                labels_processed.append(label)
+        
+        if not features_list:
+            print(f"No features extracted in batch {batch_idx+1}, skipping")
+            continue
+        
+        # Create feature matrix for this batch
+        X_batch = np.array(features_list)
+        
+        # Get feature names if not already determined
+        if feature_columns is None:
+            num_features = X_batch.shape[1]
+            feature_columns = [f'feature_{i}' for i in range(num_features)]
+        
+        # Create batch dataframe
+        batch_df = pd.DataFrame(X_batch, columns=feature_columns)
+        batch_df['label'] = labels_processed
+        batch_df['file_path'] = files_processed
+        
+        # If first batch, create the file, otherwise append
+        if batch_idx == 0:
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            batch_df.to_csv(output_file, index=False)
+        else:
+            batch_df.to_csv(output_file, mode='a', header=False, index=False)
+        
+        # Free memory
+        del X_batch, batch_df, features_list, files_processed, labels_processed
+        
+    print(f"All batches processed. Features saved to {output_file}")
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process audio dataset in batches to avoid memory errors")
-    parser.add_argument("--dataset", type=str, default=r"C:\Project Resources\dataset\raw", 
-                      help="Path to dataset directory")
-    parser.add_argument("--ai_folder", type=str, default="ai", 
-                      help="Name of the folder containing AI-generated voices")
-    parser.add_argument("--human_folder", type=str, default="human", 
-                      help="Name of the folder containing human voices")
-    parser.add_argument("--batch_size", type=int, default=100, 
-                      help="Number of files to process in each batch")
-    parser.add_argument("--output", type=str, default="output/features.csv", 
-                      help="Output path for the features CSV file")
+    parser = argparse.ArgumentParser(description="Process audio dataset and extract features")
+    parser.add_argument("--dataset", type=str, required=True, help="Path to dataset folder")
+    parser.add_argument("--ai_folder", type=str, default="ai_generated", help="Name of AI folder")
+    parser.add_argument("--human_folder", type=str, default="human", help="Name of human folder")
+    parser.add_argument("--jobs", type=int, default=-1, help="Number of parallel jobs")
+    parser.add_argument("--batch_size", type=int, default=100, help="Batch size for processing")
+    parser.add_argument("--output", type=str, default=get_output_path("features.csv"),
+                       help="Output file path")
     
     args = parser.parse_args()
     
-    print("Starting batch processing with the following settings:")
-    print(f"Dataset path: {args.dataset}")
-    print(f"AI folder: {args.ai_folder}")
-    print(f"Human folder: {args.human_folder}")
-    print(f"Batch size: {args.batch_size}")
-    print(f"Output file: {args.output}")
-    print("\nProcessing will be done sequentially to minimize memory usage.")
-    
-    process_files_in_batches(
+    # Process the dataset
+    batch_process_dataset(
         dataset_path=args.dataset,
         ai_folder=args.ai_folder,
         human_folder=args.human_folder,
+        jobs=args.jobs,
         batch_size=args.batch_size,
         output_file=args.output
     ) 

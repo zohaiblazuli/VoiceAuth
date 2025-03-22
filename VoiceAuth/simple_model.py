@@ -1,15 +1,18 @@
+import os
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+import joblib
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_score, recall_score, f1_score
+from sklearn.feature_selection import SelectFromModel
+from sklearn.ensemble import RandomForestClassifier
+from utils import get_output_path, get_model_path  # Import path utilities
 import argparse
-import os
-import joblib
 import time
 
-def train_model(features_path, model_output_path, test_size=0.2, random_state=42, callback=None):
+def train_model(features_path, model_output_path, test_size=0.2, random_state=42, callback=None, use_feature_selection=False):
     """
     Train a simplified logistic regression model with lower memory usage
     
@@ -25,6 +28,8 @@ def train_model(features_path, model_output_path, test_size=0.2, random_state=42
         Random seed for reproducibility
     callback : function
         Optional callback function to report progress (takes a string message)
+    use_feature_selection : bool
+        Whether to use feature selection to improve model
     """
     def report_progress(message):
         """Report progress via callback if available"""
@@ -172,23 +177,23 @@ def classify_audio(features, model_path, scaler_path):
     return is_ai, confidence
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a simplified voice classifier model")
-    parser.add_argument("--features", type=str, default="output/features.csv", 
-                      help="Path to features CSV file")
-    parser.add_argument("--output", type=str, default="output/models/voice_classifier.pkl", 
-                      help="Output path for the trained model")
-    parser.add_argument("--test_size", type=float, default=0.2, 
-                      help="Proportion of data to use for testing")
+    parser = argparse.ArgumentParser(description="Train a voice classifier model.")
+    parser.add_argument("--features", type=str, default=get_output_path("features.csv"),
+                        help="Path to features CSV file")
+    parser.add_argument("--output", type=str, default=get_model_path("voice_classifier.pkl"),
+                        help="Path to save the model")
+    parser.add_argument("--use_feature_selection", action="store_true",
+                        help="Use feature selection to improve model")
     
     args = parser.parse_args()
     
     print("Starting model training with the following settings:")
     print(f"Features file: {args.features}")
     print(f"Model output: {args.output}")
-    print(f"Test size: {args.test_size}")
+    print(f"Use feature selection: {args.use_feature_selection}")
     
     train_model(
         features_path=args.features,
         model_output_path=args.output,
-        test_size=args.test_size
+        use_feature_selection=args.use_feature_selection
     ) 
