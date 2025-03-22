@@ -32,7 +32,7 @@ A desktop application that uses machine learning to differentiate between AI-gen
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/VoiceAuth.git
+   git clone https://github.com/zohaiblazuli/VoiceAuth.git
    cd VoiceAuth
    ```
 
