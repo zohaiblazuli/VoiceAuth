@@ -59,7 +59,7 @@ If you prefer to avoid installing build tools, you can use Anaconda/Miniconda wh
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/VoiceAuth.git
+   git clone https://github.com/zohaiblazuli/VoiceAuth.git
    cd VoiceAuth
    ```
 
