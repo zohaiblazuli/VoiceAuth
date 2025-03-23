@@ -1,6 +1,7 @@
 Created by two nerds ;)
 
-*This project is currently under development. It will be presented at Regeneron ISEF 2025, held at Columbus, Ohio.*
+
+*This repository is not final and still in development. You're free to report any bugs and we'll try to roll-out an update as soon as possible. This project is to be presented at Regeneron ISEF 2025, to be held at Columbus, Ohio, USA.
 
 # VoiceAuth - AI Voice Detection System
 
@@ -17,22 +18,48 @@ A desktop application that uses machine learning to differentiate between AI-gen
 - 💾 **Cross-Platform Support**: Works on Windows, macOS, and Linux
 
 ## Screenshots
-![Screenshot 2025-03-22 203757](https://github.com/user-attachments/assets/8a7fb6f6-5507-4fb7-b624-4078a948bd37)
 
-![Screenshot 2025-03-22 203823](https://github.com/user-attachments/assets/ea311f88-7bde-4f29-bb20-c882b7227f77)
+![Screenshot 2025-03-22 203757](https://github.com/user-attachments/assets/634650b0-f3bc-46e8-9e19-ffa8fcf7e28d)
 
+![Screenshot 2025-03-22 203823](https://github.com/user-attachments/assets/92c785f3-5954-416a-afb5-2f90beb2250c)
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.8 or higher
+- C++ Build Tools (for Windows users)
 
-### Setup
+### Windows Setup
+
+**Step 1: Install C++ Build Tools (required for NumPy, SciPy, and other scientific packages)**
+
+1. Download Microsoft C++ Build Tools:
+   - Go to [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+   - Click "Download Build Tools"
+
+2. Run the installer:
+   - When prompted for workloads, select "C++ build tools"
+   - In the right panel, ensure the following components are selected:
+     - MSVC v142 - VS 2019 C++ x64/x86 build tools
+     - Windows 10 SDK
+     - C++ CMake tools for Windows
+   - Click Install
+
+**Alternative: Use Anaconda/Miniconda**
+
+If you prefer to avoid installing build tools, you can use Anaconda/Miniconda which provides pre-compiled binaries:
+1. Download and install [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+2. Create an environment: `conda create -n voiceauth python=3.8`
+3. Activate it: `conda activate voiceauth`
+4. Install packages: `conda install numpy pandas matplotlib scikit-learn`
+5. Then install the remaining packages with pip: `pip install -r requirements.txt`
+
+### Standard Setup
 
 1. Clone the repository:
    ```
-   git clone https://github.com/zohaiblazuli/VoiceAuth.git
+   git clone https://github.com/yourusername/VoiceAuth.git
    cd VoiceAuth
    ```
 
@@ -41,7 +68,13 @@ A desktop application that uses machine learning to differentiate between AI-gen
    pip install -r requirements.txt
    ```
 
-3. Run the application:
+3. Verify your setup:
+   ```
+   python check_setup.py
+   ```
+   This script will check if you have all necessary components installed and provide guidance on fixing any issues.
+
+4. Run the application:
    ```
    python run_voiceauth.py
    ```
@@ -152,9 +185,9 @@ To add new features:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License & Copyright
+## Licensing & Copyright
 
-Do kindly mention/credit us when showcasing this project.
+Please do mention us when showcasing this repository.
 
 ## Acknowledgements
 
