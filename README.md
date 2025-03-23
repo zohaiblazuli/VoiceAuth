@@ -1,7 +1,7 @@
 Created by two nerds ;)
 
 
-*This repository is not final and still in development. You're free to report any bugs and we'll try to roll-out an update as soon as possible. This project is to be presented at Regeneron ISEF 2025, to be held at Columbus, Ohio, USA.
+*This repository is not final and still in development. You're free to report any bugs and we'll try to roll-out an update as soon as possible. This project is to be presented at Regeneron ISEF 2025, to be held at Columbus, Ohio, USA.*
 
 # VoiceAuth - AI Voice Detection System
 
